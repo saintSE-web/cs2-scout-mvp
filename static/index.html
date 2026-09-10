@@ -11,10 +11,10 @@
       <header>
         <p class="eyebrow">LOCAL • ONE DEMO • NO GAME OVERLAY</p>
         <h1>CS2 Scout</h1>
-        <p class="subhead">Один игрок → один матч → частые позиции по T и CT.</p>
+        <p class="subhead">Загрузи демо → выбери любого игрока → посмотри T/CT heatmap.</p>
       </header>
 
-      <section class="card lookup">
+      <section class="card lookup source-card hidden">
         <p class="eyebrow">FACEIT — основной источник демок</p>
         <label for="faceitNick">FACEIT nickname</label>
         <div class="row">
@@ -28,7 +28,7 @@
         <p class="hint">Если у выбранного матча есть demo URL, MVP подставит её сам. Для закрытых ссылок нужен отдельный Downloads API access token.</p>
       </section>
 
-      <section class="card lookup">
+      <section class="card lookup source-card hidden">
         <p class="eyebrow">LEETIFY — только поиск матчей</p>
         <label for="player">SteamID64 или публичная ссылка Steam</label>
         <div class="row">
@@ -45,16 +45,17 @@
         <div id="matchList" class="match-list"></div>
       </section>
 
-      <section class="card hidden" id="demoCard">
+      <section class="card" id="demoCard">
         <h2>Разобрать одну демку</h2>
         <p id="selectedMatch" class="selected"></p>
         <a id="faceitRoom" class="match-room hidden" target="_blank" rel="noreferrer">Открыть матч на FACEIT ↗</a>
-        <p class="hint">Для Valve матчей download URL не публикуется Leetify API: скачай демо в CS2 и перетащи сюда. Прямую HTTPS-ссылку на FACEIT/Valve демо можно вставить ниже.</p>
+        <p class="hint">Демо уже содержит позиции всех игроков. Никакой API key, SteamID или FACEIT nickname для загрузки файла не нужны.</p>
         <div class="row">
           <input id="demoUrl" type="url" placeholder="https://…/match.dem, .dem.gz или .dem.zst" />
           <button id="parseUrl">Скачать и разобрать</button>
         </div>
         <div class="drop" id="dropZone">или брось сюда локальный файл <strong>.dem, .dem.gz или .dem.zst</strong><input id="demoFile" type="file" accept=".dem,.dem.gz,.dem.zst" /></div>
+        <button id="showSources" class="secondary">Необязательно: найти демо через FACEIT / Leetify</button>
       </section>
 
       <section id="results" class="hidden">

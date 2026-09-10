@@ -94,7 +94,6 @@ $("find").onclick = async () => {
 };
 
 async function parseDemo(options) {
-  if (!steamId) return message("Сначала найди игрока.", true);
   message("Загружаю и парсю демо. На больших файлах это займёт немного времени…");
   try {
     const result = await jsonFetch(options.url, options);
@@ -102,6 +101,12 @@ async function parseDemo(options) {
     message("Готово. Временный файл демо удалён.");
   } catch (error) { message(error.message, true); }
 }
+
+$("showSources").onclick = () => {
+  document.querySelectorAll(".source-card").forEach((card) => card.classList.remove("hidden"));
+  $("showSources").classList.add("hidden");
+  message("Поиск по FACEIT/Leetify раскрыт. Он нужен только когда демки ещё нет.");
+};
 
 $("parseUrl").onclick = async () => {
   const url = $("demoUrl").value.trim();
