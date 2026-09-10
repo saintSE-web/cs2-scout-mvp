@@ -267,7 +267,12 @@ def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str,
         row_steam_id = row.get("player_steamid", row.get("steamid"))
         if row_steam_id is None:
             continue
-        steam_id = str(int(row_steam_id))
+        # Demo tick tables also contain spectator/world rows where SteamID is NaN.
+        # Treat those as non-player rows instead of turning a valid demo into HTTP 500.
+        try:
+            steam_id = str(int(row_steam_id))
+        except (TypeError, ValueError, OverflowError):
+            continue
         player = player_data.setdefault(steam_id, {
             "steam_id": steam_id,
             "name": row.get("player_name") or row.get("name") or steam_id,
