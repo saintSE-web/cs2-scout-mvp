@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CS2 Scout — one-demo MVP</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">LOCAL • ONE DEMO • NO GAME OVERLAY</p>
+        <h1>CS2 Scout</h1>
+        <p class="subhead">Один игрок → один матч → частые позиции по T и CT.</p>
+      </header>
+
+      <section class="card lookup">
+        <p class="eyebrow">FACEIT — основной источник демок</p>
+        <label for="faceitNick">FACEIT nickname</label>
+        <div class="row">
+          <input id="faceitNick" placeholder="nickname" />
+          <button id="findFaceit">Найти FACEIT матчи</button>
+        </div>
+        <label class="minor" for="faceitKey">FACEIT Data API key</label>
+        <input id="faceitKey" type="password" autocomplete="off" placeholder="нужен для официального FACEIT API; не сохраняется" />
+        <label class="minor" for="faceitDownloadToken">FACEIT Downloads API token — только для закрытых demo URL</label>
+        <input id="faceitDownloadToken" type="password" autocomplete="off" placeholder="не сохраняется; требуется отдельный доступ FACEIT" />
+        <p class="hint">Если у выбранного матча есть demo URL, MVP подставит её сам. Для закрытых ссылок нужен отдельный Downloads API access token.</p>
+      </section>
+
+      <section class="card lookup">
+        <p class="eyebrow">LEETIFY — только поиск матчей</p>
+        <label for="player">SteamID64 или публичная ссылка Steam</label>
+        <div class="row">
+          <input id="player" value="76561199661900493" placeholder="7656119… или steamcommunity.com/id/..." />
+          <button id="find">Найти матчи</button>
+        </div>
+        <label class="minor" for="apiKey">Leetify API key — необязательно, повышает лимит</label>
+        <input id="apiKey" type="password" autocomplete="off" placeholder="не сохраняется" />
+        <p class="hint">Leetify Public API не выдаёт raw demo. Демо не хранится: файл удаляется сразу после парсинга.</p>
+      </section>
+
+      <section id="matches" class="card hidden">
+        <h2>Последние публичные матчи</h2>
+        <div id="matchList" class="match-list"></div>
+      </section>
+
+      <section class="card hidden" id="demoCard">
+        <h2>Разобрать одну демку</h2>
+        <p id="selectedMatch" class="selected"></p>
+        <p class="hint">Для Valve матчей download URL не публикуется Leetify API: скачай демо в CS2 и перетащи сюда. Прямую HTTPS-ссылку на FACEIT/Valve демо можно вставить ниже.</p>
+        <div class="row">
+          <input id="demoUrl" type="url" placeholder="https://…/match.dem, .dem.gz или .dem.zst" />
+          <button id="parseUrl">Скачать и разобрать</button>
+        </div>
+        <div class="drop" id="dropZone">или брось сюда локальный файл <strong>.dem</strong><input id="demoFile" type="file" accept=".dem" /></div>
+      </section>
+
+      <section id="results" class="hidden">
+        <div class="result-heading">
+          <div><p class="eyebrow">POSITION DENSITY</p><h2 id="resultTitle">Heatmap</h2></div>
+          <div id="counts" class="counts"></div>
+        </div>
+        <div class="maps">
+          <article class="card"><h3>T side</h3><canvas id="tCanvas" width="580" height="520"></canvas></article>
+          <article class="card"><h3>CT side</h3><canvas id="ctCanvas" width="580" height="520"></canvas></article>
+        </div>
+        <p class="hint">Это адаптивная world-coordinate heatmap. Следующий шаг — наложить её на радар каждой карты через map calibration.</p>
+      </section>
+      <p id="status" role="status"></p>
+    </main>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
