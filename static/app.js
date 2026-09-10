@@ -152,9 +152,20 @@ function drawHeatmap(canvas, points) {
   ctx.fillStyle = "#8fa1b8"; ctx.font = "12px ui-monospace"; ctx.fillText(`${Math.round(minX)} → ${Math.round(maxX)} X`, pad, height - 15); ctx.fillText(`${Math.round(minY)} → ${Math.round(maxY)} Y`, pad, 22);
 }
 function drawResults(result) {
+  window.lastResult = result;
   $("results").classList.remove("hidden");
-  $("resultTitle").textContent = `${result.player_name} · ${result.map_name}`;
-  $("counts").textContent = `T ${result.sides.T.length} · CT ${result.sides.CT.length} sampled positions`;
-  drawHeatmap($("tCanvas"), result.sides.T); drawHeatmap($("ctCanvas"), result.sides.CT);
+  const picker = $("playerSelect");
+  picker.innerHTML = result.players.map((player) => `<option value="${player.steam_id}">${escapeHtml(player.name)}</option>`).join("");
+  picker.value = result.steam_id;
+  picker.onchange = () => selectDemoPlayer(picker.value);
+  selectDemoPlayer(result.steam_id);
   $("results").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+function selectDemoPlayer(steamId) {
+  const result = window.lastResult;
+  const player = result.players.find((item) => item.steam_id === steamId);
+  if (!player) return;
+  $("resultTitle").textContent = `${player.name} · ${result.map_name}`;
+  $("counts").textContent = `T ${player.sides.T.length} · CT ${player.sides.CT.length} sampled positions`;
+  drawHeatmap($("tCanvas"), player.sides.T); drawHeatmap($("ctCanvas"), player.sides.CT);
 }

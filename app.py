@@ -190,7 +190,7 @@ def dataframe_is_empty(frame: Any) -> bool:
     return bool(frame.empty)
 
 
-def analyze_demo(path: Path, steam_id: str) -> dict[str, Any]:
+def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str, Any]:
     parser = DemoParser(str(path))
     props = [
         "X", "Y", "is_alive", "team_num", "player_steamid", "player_name",
@@ -204,18 +204,23 @@ def analyze_demo(path: Path, steam_id: str) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(422, f"Парсер не смог прочитать демо: {exc}") from exc
     if dataframe_is_empty(ticks):
-        fail("В демо не нашлись тики выбранного игрока. Проверь SteamID и файл.", 422)
+        fail("В демо не нашлись позиции игроков.", 422)
 
-    samples: dict[str, list[dict[str, float | int]]] = {"T": [], "CT": []}
-    last_tick = -SAMPLE_EVERY_TICKS
     rows = dataframe_rows(ticks)
-    target_steam_id = int(steam_id)
-    found_player = False
+    player_data: dict[str, dict[str, Any]] = {}
+    last_tick_by_player: dict[str, int] = {}
     for row in rows:
         row_steam_id = row.get("player_steamid", row.get("steamid"))
-        if row_steam_id is None or int(row_steam_id) != target_steam_id:
+        if row_steam_id is None:
             continue
-        found_player = True
+        steam_id = str(int(row_steam_id))
+        player = player_data.setdefault(steam_id, {
+            "steam_id": steam_id,
+            "name": row.get("player_name") or row.get("name") or steam_id,
+            "sides": {"T": [], "CT": []},
+        })
+        if row.get("player_name") or row.get("name"):
+            player["name"] = row.get("player_name") or row.get("name")
         team = row.get("team_num")
         if team == 2:
             side = "T"
@@ -224,38 +229,41 @@ def analyze_demo(path: Path, steam_id: str) -> dict[str, Any]:
         else:
             continue
         tick = int(row.get("tick") or row.get("game_time") or 0)
+        last_tick = last_tick_by_player.get(steam_id, -SAMPLE_EVERY_TICKS)
         if tick - last_tick < SAMPLE_EVERY_TICKS:
             continue
-        last_tick = tick
+        last_tick_by_player[steam_id] = tick
         if row.get("is_alive") is False:
             continue
         x, y = row.get("X"), row.get("Y")
         if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
             continue
-        samples[side].append({"x": round(float(x), 1), "y": round(float(y), 1), "round": int(row.get("total_rounds_played") or 0)})
+        player["sides"][side].append({"x": round(float(x), 1), "y": round(float(y), 1), "round": int(row.get("total_rounds_played") or 0)})
 
-    if not found_player:
-        fail("В загруженной демке нет выбранного игрока. Скачай демо именно выбранного матча или выбери игрока из этой демки.", 422)
-    if not samples["T"] and not samples["CT"]:
-        fail("В демо нет пригодных живых позиций игрока.", 422)
+    players = [player for player in player_data.values() if player["sides"]["T"] or player["sides"]["CT"]]
+    if not players:
+        fail("В демо нет пригодных живых позиций игроков.", 422)
+    players.sort(key=lambda player: player["name"].casefold())
+    selected = next((player for player in players if player["steam_id"] == preferred_steam_id), players[0])
     header: dict[str, Any] = {}
     try:
         header = parser.parse_header()
     except Exception:
         pass
     return {
-        "steam_id": steam_id,
+        "steam_id": selected["steam_id"],
         "map_name": header.get("map_name", "unknown") if isinstance(header, dict) else "unknown",
-        "player_name": next((r.get("player_name") for r in rows if r.get("player_steamid", r.get("steamid")) == target_steam_id and r.get("player_name")), steam_id),
+        "player_name": selected["name"],
         "sample_every_ticks": SAMPLE_EVERY_TICKS,
-        "sides": samples,
+        "sides": selected["sides"],
+        "players": players,
     }
 
 
-async def analyze_path(path: Path, steam_id: str) -> dict[str, Any]:
+async def analyze_path(path: Path, preferred_steam_id: str | None = None) -> dict[str, Any]:
     try:
         path = unpack_demo(path)
-        return analyze_demo(path, steam_id)
+        return analyze_demo(path, preferred_steam_id)
     finally:
         # demoparser2 can keep the demo handle alive briefly on Windows.
         # Cleanup must never replace a useful parse error with HTTP 500.
@@ -268,7 +276,9 @@ async def analyze_path(path: Path, steam_id: str) -> dict[str, Any]:
 
 @app.post("/api/analyze-url")
 async def analyze_url(payload: dict[str, str]) -> dict[str, Any]:
-    steam_id = require_steam_id(payload.get("steam_id", ""))
+    steam_id = payload.get("steam_id", "").strip() or None
+    if steam_id:
+        steam_id = require_steam_id(steam_id)
     url = payload.get("demo_url", "").strip()
     with tempfile.NamedTemporaryFile(prefix="cs2-scout-", suffix=".dem", delete=False) as temp:
         path = Path(temp.name)
@@ -304,7 +314,9 @@ async def faceit_signed_demo(payload: dict[str, str], request: Request) -> dict[
 
 @app.post("/api/analyze-upload")
 async def analyze_upload(request: Request) -> dict[str, Any]:
-    steam_id = require_steam_id(request.headers.get("x-steam-id", ""))
+    steam_id = request.headers.get("x-steam-id", "").strip() or None
+    if steam_id:
+        steam_id = require_steam_id(steam_id)
     content_length = int(request.headers.get("content-length", "0") or 0)
     if content_length > MAX_DEMO_BYTES:
         fail("Демо больше лимита 750 МБ.", 413)
