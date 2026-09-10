@@ -103,11 +103,25 @@ async function parseDemo(options) {
 }
 
 function analysisHeaders(extra = {}) {
+  const { seconds, radius } = filterValues();
   return {
-    "X-Stationary-Seconds": $("stationarySeconds").value,
-    "X-Stationary-Radius": $("stationaryRadius").value,
+    "X-Stationary-Seconds": seconds,
+    "X-Stationary-Radius": radius,
     ...extra,
   };
+}
+
+function filterValues() {
+  const secondsSlider = Number($("stationarySeconds").value);
+  // 0–25: 0.0–2.5 sec in tenths. The remaining 75% advances by half-seconds.
+  const seconds = secondsSlider <= 25 ? secondsSlider / 10 : 2.5 + (secondsSlider - 25) / 2;
+  return { seconds, radius: Number($("stationaryRadius").value) };
+}
+
+function renderFilterValues() {
+  const { seconds, radius } = filterValues();
+  $("stationarySecondsValue").value = `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} сек`;
+  $("stationaryRadiusValue").value = `${radius} units`;
 }
 
 const SPAWN_IGNORE_SECONDS = 22;
@@ -149,8 +163,7 @@ let filterRefreshTimer;
 function refreshCurrentFilter() {
   const result = window.lastResult;
   if (!result || !result.players.every((player) => player.samples)) return;
-  const seconds = Number($("stationarySeconds").value);
-  const radius = Number($("stationaryRadius").value);
+  const { seconds, radius } = filterValues();
   if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(radius) || radius <= 0) return;
   for (const player of result.players) {
     player.sides = {
@@ -166,10 +179,13 @@ function refreshCurrentFilter() {
 
 for (const inputId of ["stationarySeconds", "stationaryRadius"]) {
   $(inputId).addEventListener("input", () => {
+    renderFilterValues();
     clearTimeout(filterRefreshTimer);
     filterRefreshTimer = setTimeout(refreshCurrentFilter, 160);
   });
 }
+
+renderFilterValues();
 
 $("showSources").onclick = () => {
   document.querySelectorAll(".source-card").forEach((card) => card.classList.remove("hidden"));

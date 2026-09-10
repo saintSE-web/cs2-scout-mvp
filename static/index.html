@@ -53,10 +53,10 @@
         <details class="filter-settings" open>
           <summary>Настройки фильтра позиций</summary>
           <div class="setting-grid">
-            <label for="stationarySeconds">Стоял минимум, сек<input id="stationarySeconds" type="number" step="0.5" value="6" /></label>
-            <label for="stationaryRadius">Разброс позиции, units<input id="stationaryRadius" type="number" step="1" value="60" /></label>
+            <label for="stationarySeconds">Стоял минимум: <output id="stationarySecondsValue">6 сек</output><input id="stationarySeconds" type="range" min="0" max="100" step="1" value="32" /></label>
+            <label for="stationaryRadius">Разброс позиции: <output id="stationaryRadiusValue">60 units</output><input id="stationaryRadius" type="range" min="1" max="1000" step="1" value="60" /></label>
           </div>
-          <p class="hint">Spawn/freeze-time по-прежнему не учитывается. Меньше радиус — строже одна точка; больше — объединяет близкие позиции. После загрузки изменение этих чисел пересчитывает карту сразу, без повторной загрузки демки.</p>
+          <p class="hint">Первые 25% слайдера времени — шаг 0,1 сек; дальше шаг 0,5 сек. Spawn/freeze-time по-прежнему не учитывается. После загрузки изменение параметров пересчитывает карту сразу, без повторной загрузки демки.</p>
         </details>
         <div class="row">
           <input id="demoUrl" type="url" placeholder="https://…/match.dem, .dem.gz или .dem.zst" />
