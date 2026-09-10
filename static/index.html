@@ -56,7 +56,7 @@
             <label for="stationarySeconds">Стоял минимум, сек<input id="stationarySeconds" type="number" step="0.5" value="6" /></label>
             <label for="stationaryRadius">Разброс позиции, units<input id="stationaryRadius" type="number" step="1" value="60" /></label>
           </div>
-          <p class="hint">Spawn/freeze-time по-прежнему не учитывается. Меньше радиус — строже одна точка; больше — объединяет близкие позиции.</p>
+          <p class="hint">Spawn/freeze-time по-прежнему не учитывается. Меньше радиус — строже одна точка; больше — объединяет близкие позиции. После загрузки изменение этих чисел пересчитывает карту сразу, без повторной загрузки демки.</p>
         </details>
         <div class="row">
           <input id="demoUrl" type="url" placeholder="https://…/match.dem, .dem.gz или .dem.zst" />

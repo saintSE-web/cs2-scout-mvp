@@ -110,6 +110,67 @@ function analysisHeaders(extra = {}) {
   };
 }
 
+const SPAWN_IGNORE_SECONDS = 22;
+
+function stationarySpots(samples, minimumSeconds, radiusUnits) {
+  if (!samples?.length) return [];
+  const sorted = [...samples].sort((a, b) => a.round - b.round || a.time - b.time || a.tick - b.tick);
+  const roundStarts = new Map();
+  for (const sample of sorted) if (!roundStarts.has(sample.round)) roundStarts.set(sample.round, sample.time);
+  const spots = [];
+  let cluster = [];
+  const commit = () => {
+    if (cluster.length < 2) return;
+    const first = cluster[0], last = cluster.at(-1);
+    const duration = last.time - first.time;
+    if (duration < minimumSeconds || first.time - roundStarts.get(first.round) < SPAWN_IGNORE_SECONDS) return;
+    spots.push({
+      x: Number((cluster.reduce((sum, point) => sum + point.x, 0) / cluster.length).toFixed(1)),
+      y: Number((cluster.reduce((sum, point) => sum + point.y, 0) / cluster.length).toFixed(1)),
+      round: first.round, duration: Number(duration.toFixed(1)),
+    });
+  };
+  for (const sample of sorted) {
+    if (!cluster.length) { cluster = [sample]; continue; }
+    const previous = cluster.at(-1);
+    const centerX = cluster.reduce((sum, point) => sum + point.x, 0) / cluster.length;
+    const centerY = cluster.reduce((sum, point) => sum + point.y, 0) / cluster.length;
+    const sameRound = sample.round === previous.round;
+    const continuous = sample.time - previous.time <= 2;
+    const withinRadius = Math.hypot(sample.x - centerX, sample.y - centerY) <= radiusUnits;
+    if (sameRound && continuous && withinRadius) cluster.push(sample);
+    else { commit(); cluster = [sample]; }
+  }
+  commit();
+  return spots;
+}
+
+let filterRefreshTimer;
+function refreshCurrentFilter() {
+  const result = window.lastResult;
+  if (!result || !result.players.every((player) => player.samples)) return;
+  const seconds = Number($("stationarySeconds").value);
+  const radius = Number($("stationaryRadius").value);
+  if (!Number.isFinite(seconds) || seconds < 0 || !Number.isFinite(radius) || radius <= 0) return;
+  for (const player of result.players) {
+    player.sides = {
+      T: stationarySpots(player.samples.T, seconds, radius),
+      CT: stationarySpots(player.samples.CT, seconds, radius),
+    };
+  }
+  result.min_stationary_seconds = seconds;
+  result.stationary_radius_units = radius;
+  selectDemoPlayer($("playerSelect").value || result.steam_id);
+  message("Фильтр пересчитан без повторной загрузки демки.");
+}
+
+for (const inputId of ["stationarySeconds", "stationaryRadius"]) {
+  $(inputId).addEventListener("input", () => {
+    clearTimeout(filterRefreshTimer);
+    filterRefreshTimer = setTimeout(refreshCurrentFilter, 160);
+  });
+}
+
 $("showSources").onclick = () => {
   document.querySelectorAll(".source-card").forEach((card) => card.classList.remove("hidden"));
   $("showSources").classList.add("hidden");

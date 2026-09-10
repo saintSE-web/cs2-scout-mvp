@@ -313,7 +313,9 @@ def analyze_demo(
 
     for player in player_data.values():
         player["sides"] = {side: stationary_spots(player["raw_sides"][side], radius_units, min_seconds) for side in ("T", "CT")}
-        del player["raw_sides"]
+        # Keep the already-sampled positions in the local response. The browser can
+        # reapply the user's time/radius filter instantly without uploading again.
+        player["samples"] = player.pop("raw_sides")
 
     players = [player for player in player_data.values() if player["sides"]["T"] or player["sides"]["CT"]]
     if not players:
