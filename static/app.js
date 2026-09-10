@@ -23,7 +23,9 @@ function escapeHtml(value) {
 function renderMatches(matches, provider) {
   $("matchList").innerHTML = matches.map((match, index) => {
     const score = (match.team_scores || []).map((item) => item.score).join(" : ");
-    const date = match.finished_at ? new Date(match.finished_at).toLocaleString("ru-RU") : "дата неизвестна";
+    const rawDate = match.finished_at || match.started_at;
+    const timestamp = typeof rawDate === "number" && rawDate < 100000000000 ? rawDate * 1000 : rawDate;
+    const date = rawDate ? new Date(timestamp).toLocaleString("ru-RU") : "дата неизвестна";
     const name = match.map_name || match.game_mode || "unknown map";
     const source = provider === "faceit" ? "FACEIT" : match.data_source;
     return `<button class="match" data-index="${index}"><strong>${escapeHtml(name)}</strong><span>${escapeHtml(source)} · ${score || "—"}</span><small>${date}</small></button>`;

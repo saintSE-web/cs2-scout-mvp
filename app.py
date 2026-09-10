@@ -138,17 +138,24 @@ async def download_demo(url: str, destination: Path) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc:
         fail("Разрешены только прямые HTTPS-ссылки на демо.")
-    async with httpx.AsyncClient(timeout=httpx.Timeout(90, connect=15), follow_redirects=True) as client:
-        async with client.stream("GET", url) as response:
-            if response.status_code != 200:
-                fail(f"Ссылка на демо вернула HTTP {response.status_code}.", 502)
-            size = 0
-            with destination.open("wb") as output:
-                async for chunk in response.aiter_bytes():
-                    size += len(chunk)
-                    if size > MAX_DEMO_BYTES:
-                        fail("Демо больше лимита 750 МБ.")
-                    output.write(chunk)
+    try:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(90, connect=15), follow_redirects=True) as client:
+            async with client.stream("GET", url) as response:
+                if response.status_code != 200:
+                    fail(f"Ссылка на демо вернула HTTP {response.status_code}.", 502)
+                size = 0
+                with destination.open("wb") as output:
+                    async for chunk in response.aiter_bytes():
+                        size += len(chunk)
+                        if size > MAX_DEMO_BYTES:
+                            fail("Демо больше лимита 750 МБ.")
+                        output.write(chunk)
+    except httpx.HTTPError as exc:
+        fail(
+            "FACEIT resource URL нельзя скачать напрямую. Нужен Downloads API token "
+            "для signed URL или скачай демо из страницы FACEIT вручную.",
+            502,
+        )
 
 
 def unpack_demo(path: Path) -> Path:
