@@ -102,6 +102,14 @@ async function parseDemo(options) {
   } catch (error) { message(error.message, true); }
 }
 
+function analysisHeaders(extra = {}) {
+  return {
+    "X-Stationary-Seconds": $("stationarySeconds").value,
+    "X-Stationary-Radius": $("stationaryRadius").value,
+    ...extra,
+  };
+}
+
 $("showSources").onclick = () => {
   document.querySelectorAll(".source-card").forEach((card) => card.classList.remove("hidden"));
   $("showSources").classList.add("hidden");
@@ -120,13 +128,13 @@ $("parseUrl").onclick = async () => {
       finalUrl = signed.download_url;
     } catch (error) { return message(error.message, true); }
   }
-  parseDemo({ url: "/api/analyze-url", method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ steam_id: steamId, demo_url: finalUrl }) });
+  parseDemo({ url: "/api/analyze-url", method: "POST", headers: analysisHeaders({ "Content-Type": "application/json" }), body: JSON.stringify({ steam_id: steamId, demo_url: finalUrl }) });
 };
 
 $("demoFile").onchange = async (event) => {
   const file = event.target.files[0];
   if (!file) return;
-  parseDemo({ url: "/api/analyze-upload", method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Steam-Id": steamId, "X-Filename": file.name }, body: file });
+  parseDemo({ url: "/api/analyze-upload", method: "POST", headers: analysisHeaders({ "Content-Type": "application/octet-stream", "X-Steam-Id": steamId, "X-Filename": file.name }), body: file });
 };
 
 const MAP_DATA_URL = "https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/data/available.json";

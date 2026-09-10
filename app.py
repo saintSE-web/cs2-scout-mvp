@@ -193,7 +193,9 @@ def dataframe_is_empty(frame: Any) -> bool:
     return bool(frame.empty)
 
 
-def stationary_spots(samples: list[dict[str, float | int]]) -> list[dict[str, float | int]]:
+def stationary_spots(
+    samples: list[dict[str, float | int]], radius_units: int, min_seconds: float,
+) -> list[dict[str, float | int]]:
     """Collapse a player's tick samples into meaningful stationary positions.
 
     The first stationary segment of every round is ignored: it is the freeze/spawn
@@ -216,7 +218,7 @@ def stationary_spots(samples: list[dict[str, float | int]]) -> list[dict[str, fl
         duration = float(last["time"]) - float(first["time"])
         round_number = int(first["round"])
         since_round_start = float(first["time"]) - round_start[round_number]
-        if duration < MIN_STATIONARY_SECONDS or since_round_start < SPAWN_IGNORE_SECONDS:
+        if duration < min_seconds or since_round_start < SPAWN_IGNORE_SECONDS:
             return
         spots.append({
             "x": round(sum(float(sample["x"]) for sample in cluster) / len(cluster), 1),
@@ -234,7 +236,7 @@ def stationary_spots(samples: list[dict[str, float | int]]) -> list[dict[str, fl
         continuous = float(sample["time"]) - float(previous["time"]) <= 2.0
         center_x = sum(float(item["x"]) for item in cluster) / len(cluster)
         center_y = sum(float(item["y"]) for item in cluster) / len(cluster)
-        within_radius = (float(sample["x"]) - center_x) ** 2 + (float(sample["y"]) - center_y) ** 2 <= STATIONARY_RADIUS_UNITS ** 2
+        within_radius = (float(sample["x"]) - center_x) ** 2 + (float(sample["y"]) - center_y) ** 2 <= radius_units ** 2
         if same_round and continuous and within_radius:
             cluster.append(sample)
         else:
@@ -244,7 +246,10 @@ def stationary_spots(samples: list[dict[str, float | int]]) -> list[dict[str, fl
     return spots
 
 
-def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str, Any]:
+def analyze_demo(
+    path: Path, preferred_steam_id: str | None = None,
+    radius_units: int = STATIONARY_RADIUS_UNITS, min_seconds: float = MIN_STATIONARY_SECONDS,
+) -> dict[str, Any]:
     parser = DemoParser(str(path))
     props = [
         "X", "Y", "is_alive", "team_num", "player_steamid", "player_name",
@@ -307,7 +312,7 @@ def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str,
         })
 
     for player in player_data.values():
-        player["sides"] = {side: stationary_spots(player["raw_sides"][side]) for side in ("T", "CT")}
+        player["sides"] = {side: stationary_spots(player["raw_sides"][side], radius_units, min_seconds) for side in ("T", "CT")}
         del player["raw_sides"]
 
     players = [player for player in player_data.values() if player["sides"]["T"] or player["sides"]["CT"]]
@@ -325,17 +330,20 @@ def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str,
         "map_name": header.get("map_name", "unknown") if isinstance(header, dict) else "unknown",
         "player_name": selected["name"],
         "sample_every_ticks": SAMPLE_EVERY_TICKS,
-        "stationary_radius_units": STATIONARY_RADIUS_UNITS,
-        "min_stationary_seconds": MIN_STATIONARY_SECONDS,
+        "stationary_radius_units": radius_units,
+        "min_stationary_seconds": min_seconds,
         "sides": selected["sides"],
         "players": players,
     }
 
 
-async def analyze_path(path: Path, preferred_steam_id: str | None = None) -> dict[str, Any]:
+async def analyze_path(
+    path: Path, preferred_steam_id: str | None = None,
+    radius_units: int = STATIONARY_RADIUS_UNITS, min_seconds: float = MIN_STATIONARY_SECONDS,
+) -> dict[str, Any]:
     try:
         path = unpack_demo(path)
-        return analyze_demo(path, preferred_steam_id)
+        return analyze_demo(path, preferred_steam_id, radius_units, min_seconds)
     finally:
         # demoparser2 can keep the demo handle alive briefly on Windows.
         # Cleanup must never replace a useful parse error with HTTP 500.
@@ -346,17 +354,32 @@ async def analyze_path(path: Path, preferred_steam_id: str | None = None) -> dic
             pass
 
 
+def analysis_settings(request: Request) -> tuple[int, float]:
+    """Read safe, user-facing heatmap filter settings from request headers."""
+    try:
+        radius = int(request.headers.get("x-stationary-radius", STATIONARY_RADIUS_UNITS))
+        seconds = float(request.headers.get("x-stationary-seconds", MIN_STATIONARY_SECONDS))
+    except ValueError:
+        fail("Настройки фильтра должны быть числами.")
+    if not 15 <= radius <= 300:
+        fail("Радиус стоянки: от 15 до 300 units.")
+    if not 2 <= seconds <= 60:
+        fail("Минимальная длительность: от 2 до 60 секунд.")
+    return radius, seconds
+
+
 @app.post("/api/analyze-url")
-async def analyze_url(payload: dict[str, str]) -> dict[str, Any]:
+async def analyze_url(payload: dict[str, str], request: Request) -> dict[str, Any]:
     steam_id = payload.get("steam_id", "").strip() or None
     if steam_id:
         steam_id = require_steam_id(steam_id)
     url = payload.get("demo_url", "").strip()
+    radius_units, min_seconds = analysis_settings(request)
     with tempfile.NamedTemporaryFile(prefix="cs2-scout-", suffix=".dem", delete=False) as temp:
         path = Path(temp.name)
     try:
         await download_demo(url, path)
-        return await analyze_path(path, steam_id)
+        return await analyze_path(path, steam_id, radius_units, min_seconds)
     except Exception:
         path.unlink(missing_ok=True)
         raise
@@ -389,6 +412,7 @@ async def analyze_upload(request: Request) -> dict[str, Any]:
     steam_id = request.headers.get("x-steam-id", "").strip() or None
     if steam_id:
         steam_id = require_steam_id(steam_id)
+    radius_units, min_seconds = analysis_settings(request)
     content_length = int(request.headers.get("content-length", "0") or 0)
     if content_length > MAX_DEMO_BYTES:
         fail("Демо больше лимита 750 МБ.", 413)
@@ -401,7 +425,7 @@ async def analyze_upload(request: Request) -> dict[str, Any]:
                 path.unlink(missing_ok=True)
                 fail("Демо больше лимита 750 МБ.", 413)
             temp.write(chunk)
-    return await analyze_path(path, steam_id)
+    return await analyze_path(path, steam_id, radius_units, min_seconds)
 
 
 if __name__ == "__main__":

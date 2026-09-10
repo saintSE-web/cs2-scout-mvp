@@ -50,6 +50,14 @@
         <p id="selectedMatch" class="selected"></p>
         <a id="faceitRoom" class="match-room hidden" target="_blank" rel="noreferrer">Открыть матч на FACEIT ↗</a>
         <p class="hint">Демо уже содержит позиции всех игроков. Никакой API key, SteamID или FACEIT nickname для загрузки файла не нужны.</p>
+        <details class="filter-settings" open>
+          <summary>Настройки фильтра позиций</summary>
+          <div class="setting-grid">
+            <label for="stationarySeconds">Стоял минимум, сек<input id="stationarySeconds" type="number" min="2" max="60" step="0.5" value="6" /></label>
+            <label for="stationaryRadius">Разброс позиции, units<input id="stationaryRadius" type="number" min="15" max="300" step="5" value="60" /></label>
+          </div>
+          <p class="hint">Spawn/freeze-time по-прежнему не учитывается. Меньше радиус — строже одна точка; больше — объединяет близкие позиции.</p>
+        </details>
         <div class="row">
           <input id="demoUrl" type="url" placeholder="https://…/match.dem, .dem.gz или .dem.zst" />
           <button id="parseUrl">Скачать и разобрать</button>
@@ -67,7 +75,7 @@
           <article class="card"><h3>T side</h3><canvas id="tCanvas" width="1024" height="1024"></canvas></article>
           <article class="card"><h3>CT side</h3><canvas id="ctCanvas" width="1024" height="1024"></canvas></article>
         </div>
-        <p class="hint">Здесь только стоянки: минимум 6 сек в радиусе 60 units. Первый статичный сегмент каждого раунда (spawn/freeze-time) исключён. Позиции калибруются по overview-данным карты.</p>
+        <p class="hint">Здесь только стоянки по текущим настройкам. Первый статичный сегмент каждого раунда (spawn/freeze-time) исключён. Позиции калибруются по overview-данным карты.</p>
       </section>
       <p id="status" role="status"></p>
     </main>
