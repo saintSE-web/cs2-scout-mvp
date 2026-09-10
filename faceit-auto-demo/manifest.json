@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "CS2 Scout — FACEIT Auto Demo",
+  "version": "0.1.0",
+  "description": "Presses FACEIT's own Watch Demo button in an open match room. It does not read cookies or API keys.",
+  "content_scripts": [
+    {
+      "matches": ["https://www.faceit.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
