@@ -40,7 +40,12 @@ function renderMatches(matches, provider) {
     const selectedSource = provider === "faceit" ? "FACEIT" : selected.data_source;
     $("selectedMatch").textContent = `Выбрано: ${selected.map_name || selected.game_mode || "match"} · ${selectedSource} · ${selected.match_id || selected.data_source_match_id || selected.id}`;
     $("demoCard").classList.remove("hidden");
-    if (provider === "faceit") loadFaceitDemo(selected.match_id || selected.id);
+    const room = $("faceitRoom");
+    if (provider === "faceit") {
+      room.href = `https://www.faceit.com/en/cs2/room/${encodeURIComponent(selected.match_id || selected.id)}`;
+      room.classList.remove("hidden");
+      loadFaceitDemo(selected.match_id || selected.id);
+    } else room.classList.add("hidden");
   };
 }
 
