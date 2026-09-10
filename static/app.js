@@ -129,12 +129,85 @@ $("demoFile").onchange = async (event) => {
   parseDemo({ url: "/api/analyze-upload", method: "POST", headers: { "Content-Type": "application/octet-stream", "X-Steam-Id": steamId, "X-Filename": file.name }, body: file });
 };
 
+const MAP_DATA_URL = "https://raw.githubusercontent.com/MurkyYT/cs2-map-icons/main/data/available.json";
+let mapDataPromise;
+
 function color(alpha) { return `hsla(${190 - alpha * 150}, 95%, 57%, ${0.12 + alpha * 0.83})`; }
-function drawHeatmap(canvas, points) {
+
+async function getMapData(mapName) {
+  try {
+    mapDataPromise ||= fetch(MAP_DATA_URL).then((response) => {
+      if (!response.ok) throw new Error("map data unavailable");
+      return response.json();
+    });
+    return (await mapDataPromise).maps[mapName] || null;
+  } catch { return null; }
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = src;
+  });
+}
+
+function pointOnRadar(point, info, width, height) {
+  const scale = Number(info.scale);
+  if (!Number.isFinite(scale) || !scale) return null;
+  return {
+    x: (point.x - Number(info.pos_x)) / scale * (width / 1024),
+    y: (Number(info.pos_y) - point.y) / scale * (height / 1024),
+  };
+}
+
+function heatStamp(size = 128) {
+  const stamp = document.createElement("canvas");
+  stamp.width = stamp.height = size;
+  const ctx = stamp.getContext("2d");
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, "rgba(255, 238, 118, .95)");
+  gradient.addColorStop(.16, "rgba(255, 132, 70, .68)");
+  gradient.addColorStop(.42, "rgba(255, 53, 84, .32)");
+  gradient.addColorStop(1, "rgba(255, 42, 90, 0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  return stamp;
+}
+
+async function drawHeatmap(canvas, points, mapName) {
   const ctx = canvas.getContext("2d");
   const width = canvas.width, height = canvas.height;
   ctx.fillStyle = "#0b111b"; ctx.fillRect(0, 0, width, height);
   if (!points.length) { ctx.fillStyle = "#8fa1b8"; ctx.font = "18px system-ui"; ctx.fillText("Нет точек", 24, 36); return; }
+  const map = await getMapData(mapName);
+  const radarUrl = map?.radar_paths?.at(-1);
+  let radar = null;
+  if (radarUrl && map?.radar_info) {
+    try { radar = await loadImage(radarUrl); } catch { radar = null; }
+  }
+  if (radar && map.radar_info) {
+    ctx.drawImage(radar, 0, 0, width, height);
+    ctx.fillStyle = "rgba(4, 10, 18, .12)"; ctx.fillRect(0, 0, width, height);
+    const stamp = heatStamp();
+    const visible = points.map((point) => pointOnRadar(point, map.radar_info, width, height))
+      .filter((point) => point && point.x >= -70 && point.y >= -70 && point.x <= width + 70 && point.y <= height + 70);
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = Math.min(.22, Math.max(.035, 14 / Math.max(1, visible.length)));
+    for (const point of visible) ctx.drawImage(stamp, point.x - 64, point.y - 64);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "rgba(7, 15, 26, .74)"; ctx.fillRect(14, 14, 185, 29);
+    ctx.fillStyle = "#e8eef8"; ctx.font = "700 14px ui-monospace";
+    ctx.fillText(`${visible.length} позиций · radar`, 25, 34);
+    return;
+  }
+  drawFallbackHeatmap(ctx, points, width, height);
+}
+
+function drawFallbackHeatmap(ctx, points, width, height) {
   const pad = 44;
   const minX = Math.min(...points.map((p) => p.x)), maxX = Math.max(...points.map((p) => p.x));
   const minY = Math.min(...points.map((p) => p.y)), maxY = Math.max(...points.map((p) => p.y));
@@ -172,5 +245,5 @@ function selectDemoPlayer(steamId) {
   if (!player) return;
   $("resultTitle").textContent = `${player.name} · ${result.map_name}`;
   $("counts").textContent = `T ${player.sides.T.length} · CT ${player.sides.CT.length} sampled positions`;
-  drawHeatmap($("tCanvas"), player.sides.T); drawHeatmap($("ctCanvas"), player.sides.CT);
+  drawHeatmap($("tCanvas"), player.sides.T, result.map_name); drawHeatmap($("ctCanvas"), player.sides.CT, result.map_name);
 }
