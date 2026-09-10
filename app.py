@@ -210,10 +210,12 @@ def analyze_demo(path: Path, steam_id: str) -> dict[str, Any]:
     last_tick = -SAMPLE_EVERY_TICKS
     rows = dataframe_rows(ticks)
     target_steam_id = int(steam_id)
+    found_player = False
     for row in rows:
         row_steam_id = row.get("player_steamid", row.get("steamid"))
         if row_steam_id is None or int(row_steam_id) != target_steam_id:
             continue
+        found_player = True
         team = row.get("team_num")
         if team == 2:
             side = "T"
@@ -232,6 +234,8 @@ def analyze_demo(path: Path, steam_id: str) -> dict[str, Any]:
             continue
         samples[side].append({"x": round(float(x), 1), "y": round(float(y), 1), "round": int(row.get("total_rounds_played") or 0)})
 
+    if not found_player:
+        fail("В загруженной демке нет выбранного игрока. Скачай демо именно выбранного матча или выбери игрока из этой демки.", 422)
     if not samples["T"] and not samples["CT"]:
         fail("В демо нет пригодных живых позиций игрока.", 422)
     header: dict[str, Any] = {}
