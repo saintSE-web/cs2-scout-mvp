@@ -6,12 +6,12 @@ import re
 import tempfile
 import time
 import gzip
+import gc
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-import polars as pl
 import uvicorn
 import zstandard
 from demoparser2 import DemoParser
@@ -176,8 +176,17 @@ def unpack_demo(path: Path) -> Path:
     return path
 
 
-def dataframe_rows(frame: pl.DataFrame) -> list[dict[str, Any]]:
-    return frame.to_dicts()
+def dataframe_rows(frame: Any) -> list[dict[str, Any]]:
+    """demoparser2 currently returns pandas on Python, Polars on some builds."""
+    if hasattr(frame, "to_dicts"):
+        return frame.to_dicts()
+    return frame.to_dict(orient="records")
+
+
+def dataframe_is_empty(frame: Any) -> bool:
+    if hasattr(frame, "is_empty"):
+        return bool(frame.is_empty())
+    return bool(frame.empty)
 
 
 def analyze_demo(path: Path, steam_id: str) -> dict[str, Any]:
@@ -187,15 +196,23 @@ def analyze_demo(path: Path, steam_id: str) -> dict[str, Any]:
         "total_rounds_played", "game_time",
     ]
     try:
-        ticks = parser.parse_ticks(props, players=[steam_id])
+        # demoparser2 expects a numeric SteamID64, not its string representation.
+        # `players` is not a SteamID64 filter in all demoparser2 bindings.
+        # Parse player rows, then apply an explicit SteamID64 comparison below.
+        ticks = parser.parse_ticks(props)
     except Exception as exc:
         raise HTTPException(422, f"Парсер не смог прочитать демо: {exc}") from exc
-    if ticks.is_empty():
+    if dataframe_is_empty(ticks):
         fail("В демо не нашлись тики выбранного игрока. Проверь SteamID и файл.", 422)
 
     samples: dict[str, list[dict[str, float | int]]] = {"T": [], "CT": []}
     last_tick = -SAMPLE_EVERY_TICKS
-    for row in dataframe_rows(ticks):
+    rows = dataframe_rows(ticks)
+    target_steam_id = int(steam_id)
+    for row in rows:
+        row_steam_id = row.get("player_steamid", row.get("steamid"))
+        if row_steam_id is None or int(row_steam_id) != target_steam_id:
+            continue
         team = row.get("team_num")
         if team == 2:
             side = "T"
@@ -224,7 +241,7 @@ def analyze_demo(path: Path, steam_id: str) -> dict[str, Any]:
     return {
         "steam_id": steam_id,
         "map_name": header.get("map_name", "unknown") if isinstance(header, dict) else "unknown",
-        "player_name": next((r.get("player_name") for r in dataframe_rows(ticks) if r.get("player_name")), steam_id),
+        "player_name": next((r.get("player_name") for r in rows if r.get("player_steamid", r.get("steamid")) == target_steam_id and r.get("player_name")), steam_id),
         "sample_every_ticks": SAMPLE_EVERY_TICKS,
         "sides": samples,
     }
@@ -235,7 +252,13 @@ async def analyze_path(path: Path, steam_id: str) -> dict[str, Any]:
         path = unpack_demo(path)
         return analyze_demo(path, steam_id)
     finally:
-        path.unlink(missing_ok=True)
+        # demoparser2 can keep the demo handle alive briefly on Windows.
+        # Cleanup must never replace a useful parse error with HTTP 500.
+        gc.collect()
+        try:
+            path.unlink(missing_ok=True)
+        except PermissionError:
+            pass
 
 
 @app.post("/api/analyze-url")
