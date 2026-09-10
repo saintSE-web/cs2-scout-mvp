@@ -23,6 +23,9 @@ ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
 MAX_DEMO_BYTES = 750 * 1024 * 1024
 SAMPLE_EVERY_TICKS = 32
+STATIONARY_RADIUS_UNITS = 60
+MIN_STATIONARY_SECONDS = 6
+SPAWN_IGNORE_SECONDS = 22
 
 app = FastAPI(title="CS2 Scout MVP")
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -190,6 +193,57 @@ def dataframe_is_empty(frame: Any) -> bool:
     return bool(frame.empty)
 
 
+def stationary_spots(samples: list[dict[str, float | int]]) -> list[dict[str, float | int]]:
+    """Collapse a player's tick samples into meaningful stationary positions.
+
+    The first stationary segment of every round is ignored: it is the freeze/spawn
+    area. A remaining segment needs six seconds inside a 60-unit radius.
+    """
+    if not samples:
+        return []
+    samples.sort(key=lambda sample: (int(sample["round"]), float(sample["time"]), int(sample["tick"])))
+    round_start: dict[int, float] = {}
+    for sample in samples:
+        round_start.setdefault(int(sample["round"]), float(sample["time"]))
+
+    spots: list[dict[str, float | int]] = []
+    cluster: list[dict[str, float | int]] = []
+
+    def commit() -> None:
+        if len(cluster) < 2:
+            return
+        first, last = cluster[0], cluster[-1]
+        duration = float(last["time"]) - float(first["time"])
+        round_number = int(first["round"])
+        since_round_start = float(first["time"]) - round_start[round_number]
+        if duration < MIN_STATIONARY_SECONDS or since_round_start < SPAWN_IGNORE_SECONDS:
+            return
+        spots.append({
+            "x": round(sum(float(sample["x"]) for sample in cluster) / len(cluster), 1),
+            "y": round(sum(float(sample["y"]) for sample in cluster) / len(cluster), 1),
+            "round": round_number,
+            "duration": round(duration, 1),
+        })
+
+    for sample in samples:
+        if not cluster:
+            cluster.append(sample)
+            continue
+        previous = cluster[-1]
+        same_round = int(sample["round"]) == int(previous["round"])
+        continuous = float(sample["time"]) - float(previous["time"]) <= 2.0
+        center_x = sum(float(item["x"]) for item in cluster) / len(cluster)
+        center_y = sum(float(item["y"]) for item in cluster) / len(cluster)
+        within_radius = (float(sample["x"]) - center_x) ** 2 + (float(sample["y"]) - center_y) ** 2 <= STATIONARY_RADIUS_UNITS ** 2
+        if same_round and continuous and within_radius:
+            cluster.append(sample)
+        else:
+            commit()
+            cluster = [sample]
+    commit()
+    return spots
+
+
 def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str, Any]:
     parser = DemoParser(str(path))
     props = [
@@ -217,6 +271,7 @@ def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str,
         player = player_data.setdefault(steam_id, {
             "steam_id": steam_id,
             "name": row.get("player_name") or row.get("name") or steam_id,
+            "raw_sides": {"T": [], "CT": []},
             "sides": {"T": [], "CT": []},
         })
         if row.get("player_name") or row.get("name"):
@@ -238,7 +293,17 @@ def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str,
         x, y = row.get("X"), row.get("Y")
         if not isinstance(x, (int, float)) or not isinstance(y, (int, float)):
             continue
-        player["sides"][side].append({"x": round(float(x), 1), "y": round(float(y), 1), "round": int(row.get("total_rounds_played") or 0)})
+        game_time = row.get("game_time")
+        time_seconds = float(game_time) if isinstance(game_time, (int, float)) else tick / 64
+        player["raw_sides"][side].append({
+            "x": round(float(x), 1), "y": round(float(y), 1),
+            "round": int(row.get("total_rounds_played") or 0), "tick": tick,
+            "time": round(time_seconds, 3),
+        })
+
+    for player in player_data.values():
+        player["sides"] = {side: stationary_spots(player["raw_sides"][side]) for side in ("T", "CT")}
+        del player["raw_sides"]
 
     players = [player for player in player_data.values() if player["sides"]["T"] or player["sides"]["CT"]]
     if not players:
@@ -255,6 +320,8 @@ def analyze_demo(path: Path, preferred_steam_id: str | None = None) -> dict[str,
         "map_name": header.get("map_name", "unknown") if isinstance(header, dict) else "unknown",
         "player_name": selected["name"],
         "sample_every_ticks": SAMPLE_EVERY_TICKS,
+        "stationary_radius_units": STATIONARY_RADIUS_UNITS,
+        "min_stationary_seconds": MIN_STATIONARY_SECONDS,
         "sides": selected["sides"],
         "players": players,
     }

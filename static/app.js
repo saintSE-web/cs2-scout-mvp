@@ -163,7 +163,7 @@ function pointOnRadar(point, info, width, height) {
   };
 }
 
-function heatStamp(size = 128) {
+function heatStamp(size = 100) {
   const stamp = document.createElement("canvas");
   stamp.width = stamp.height = size;
   const ctx = stamp.getContext("2d");
@@ -190,18 +190,26 @@ async function drawHeatmap(canvas, points, mapName) {
   }
   if (radar && map.radar_info) {
     ctx.drawImage(radar, 0, 0, width, height);
-    ctx.fillStyle = "rgba(4, 10, 18, .12)"; ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = "rgba(4, 10, 18, .04)"; ctx.fillRect(0, 0, width, height);
     const stamp = heatStamp();
     const visible = points.map((point) => pointOnRadar(point, map.radar_info, width, height))
       .filter((point) => point && point.x >= -70 && point.y >= -70 && point.x <= width + 70 && point.y <= height + 70);
     ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = Math.min(.22, Math.max(.035, 14 / Math.max(1, visible.length)));
-    for (const point of visible) ctx.drawImage(stamp, point.x - 64, point.y - 64);
+    for (const point of visible) {
+      ctx.globalAlpha = Math.min(.88, .42 + Math.max(0, (Number(point.duration) - 6) * .035));
+      ctx.drawImage(stamp, point.x - 50, point.y - 50);
+    }
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "rgba(7, 15, 26, .74)"; ctx.fillRect(14, 14, 185, 29);
+    for (const point of visible) {
+      ctx.beginPath(); ctx.arc(point.x, point.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 246, 185, .95)"; ctx.fill();
+      ctx.beginPath(); ctx.arc(point.x, point.y, 7, 0, Math.PI * 2);
+      ctx.strokeStyle = "rgba(255, 81, 82, .9)"; ctx.lineWidth = 2; ctx.stroke();
+    }
+    ctx.fillStyle = "rgba(7, 15, 26, .82)"; ctx.fillRect(14, 14, 230, 29);
     ctx.fillStyle = "#e8eef8"; ctx.font = "700 14px ui-monospace";
-    ctx.fillText(`${visible.length} позиций · radar`, 25, 34);
+    ctx.fillText(`${visible.length} стоянок · radar`, 25, 34);
     return;
   }
   drawFallbackHeatmap(ctx, points, width, height);
@@ -244,6 +252,6 @@ function selectDemoPlayer(steamId) {
   const player = result.players.find((item) => item.steam_id === steamId);
   if (!player) return;
   $("resultTitle").textContent = `${player.name} · ${result.map_name}`;
-  $("counts").textContent = `T ${player.sides.T.length} · CT ${player.sides.CT.length} sampled positions`;
+  $("counts").textContent = `T ${player.sides.T.length} · CT ${player.sides.CT.length} стоянок ≥ ${result.min_stationary_seconds || 6} сек`;
   drawHeatmap($("tCanvas"), player.sides.T, result.map_name); drawHeatmap($("ctCanvas"), player.sides.CT, result.map_name);
 }
