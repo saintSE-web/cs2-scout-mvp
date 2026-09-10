@@ -162,13 +162,14 @@ def unpack_demo(path: Path) -> Path:
     with path.open("rb") as source:
         magic = source.read(4)
     if magic[:2] == b"\x1f\x8b":
-        unpacked = path.with_suffix(".dem")
+        # Upload temp files already use a .dem suffix; never decompress in place.
+        unpacked = path.with_name(path.name + ".unpacked.dem")
         with gzip.open(path, "rb") as source, unpacked.open("wb") as destination:
             destination.write(source.read())
         path.unlink(missing_ok=True)
         return unpacked
     if magic == b"\x28\xb5\x2f\xfd":
-        unpacked = path.with_suffix(".dem")
+        unpacked = path.with_name(path.name + ".unpacked.dem")
         with path.open("rb") as source, unpacked.open("wb") as destination:
             zstandard.ZstdDecompressor().copy_stream(source, destination)
         path.unlink(missing_ok=True)
