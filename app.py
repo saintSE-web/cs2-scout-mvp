@@ -361,10 +361,10 @@ def analysis_settings(request: Request) -> tuple[int, float]:
         seconds = float(request.headers.get("x-stationary-seconds", MIN_STATIONARY_SECONDS))
     except ValueError:
         fail("Настройки фильтра должны быть числами.")
-    if not 15 <= radius <= 300:
-        fail("Радиус стоянки: от 15 до 300 units.")
-    if not 2 <= seconds <= 60:
-        fail("Минимальная длительность: от 2 до 60 секунд.")
+    if radius <= 0:
+        fail("Радиус стоянки должен быть больше нуля.")
+    if seconds < 0:
+        fail("Минимальная длительность не может быть отрицательной.")
     return radius, seconds
 
 
